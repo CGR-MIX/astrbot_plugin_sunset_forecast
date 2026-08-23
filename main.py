@@ -109,13 +109,13 @@ async def _run(func, *args, **kwargs):
     )
 
 
-@register("sunset_forecast", "ChanGR", "晚霞与云海预报", "1.0.5")
+@register("sunset_forecast", "ChanGR", "晚霞与云海预报", "1.0.6")
 class SunsetForecastPlugin(Star):
     def __init__(self, context: Context, config=None):
         super().__init__(context)
         self.config = config
         n_cities = len(_load_cities())
-        logger.info("插件 [sunset_forecast] v1.0.5 已加载，城市表 %s 条。", n_cities)
+        logger.info("插件 [sunset_forecast] v1.0.6 已加载，城市表 %s 条。", n_cities)
 
     def _days(self) -> int:
         try:
@@ -171,7 +171,7 @@ class SunsetForecastPlugin(Star):
         except Exception as exc:
             geo_line = f"失败：{exc}"
         yield event.plain_result(
-            "晚霞插件诊断 v1.0.5\n"
+            "晚霞插件诊断 v1.0.6\n"
             f"城市表 {len(cities)} 条\n"
             f"原始输入 {raw!r}\n"
             f"表内命中 {hit}\n"

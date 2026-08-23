@@ -1,6 +1,5 @@
-# 把本插件装进已有的 AstrBot data/plugins 目录。
-# 用法：
-#   .\install_to_astrbot.ps1 -AstrBotRoot "D:\AstrBot"
+# 把本仓库作为 AstrBot 插件装进 data/plugins。
+# 用法：.\install_to_astrbot.ps1 -AstrBotRoot "D:\AstrBot"
 
 param(
     [Parameter(Mandatory = $true)]
@@ -8,20 +7,22 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$PluginSrc = $PSScriptRoot
-$RepoRoot = Split-Path $PluginSrc -Parent
+$RepoRoot = $PSScriptRoot
 $LibSrc = Join-Path $RepoRoot "sunset_forecast"
 $PluginDst = Join-Path $AstrBotRoot "data\plugins\astrbot_plugin_sunset_forecast"
 
+if (-not (Test-Path (Join-Path $RepoRoot "main.py"))) {
+    throw "仓库根目录缺少 main.py：$RepoRoot"
+}
 if (-not (Test-Path $LibSrc)) {
     throw "找不到预报库：$LibSrc"
 }
 
 New-Item -ItemType Directory -Force -Path $PluginDst | Out-Null
-Copy-Item -Force (Join-Path $PluginSrc "main.py") $PluginDst
-Copy-Item -Force (Join-Path $PluginSrc "metadata.yaml") $PluginDst
-Copy-Item -Force (Join-Path $PluginSrc "_conf_schema.json") $PluginDst
-Copy-Item -Force (Join-Path $PluginSrc "requirements.txt") $PluginDst
+Copy-Item -Force (Join-Path $RepoRoot "main.py") $PluginDst
+Copy-Item -Force (Join-Path $RepoRoot "metadata.yaml") $PluginDst
+Copy-Item -Force (Join-Path $RepoRoot "_conf_schema.json") $PluginDst
+Copy-Item -Force (Join-Path $RepoRoot "requirements.txt") $PluginDst
 
 $LibDst = Join-Path $PluginDst "sunset_forecast"
 if (Test-Path $LibDst) {
@@ -40,4 +41,4 @@ if ($junction.ExitCode -ne 0) {
 }
 
 Write-Host "插件已放到 $PluginDst"
-Write-Host "请重启 AstrBot，然后在对话里发送 /晚霞 上海 或 /云海"
+Write-Host "请重启 AstrBot，发送 /晚霞诊断 肇庆 确认版本是 v1.0.6"

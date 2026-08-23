@@ -5,42 +5,36 @@
 - 晚霞：SunsetBot GFS/EC + Open-Meteo 五因子
 - 云海：Open-Meteo 气压层（山下成云 × 山顶出云）
 
-## 用链接安装到 AstrBot
+当前版本：**v1.0.6**
 
-仓库地址（公开）：
+## 用链接安装到 AstrBot
 
 ```
 https://github.com/CGR-MIX/astrbot_plugin_sunset_forecast
 ```
 
-1. 打开 AstrBot WebUI → **插件管理**
-2. 选择 **从 GitHub 安装** / **安装插件**
-3. 粘贴上面的地址，安装后重启或重载插件
+1. 先在插件管理里 **卸载旧的「晚霞云海预报」**
+2. 重启 AstrBot
+3. 从 GitHub 安装，粘贴上面的地址（不要填子目录）
+4. 装完发 `/晚霞诊断 肇庆`，第一行必须是 `v1.0.6`
 
-也可以在对话里（视你的 AstrBot 版本而定）：
-
-```
-/plugin install https://github.com/CGR-MIX/astrbot_plugin_sunset_forecast
-```
+AstrBot 的「检查更新」读取 GitHub **Release**，不是每一次 commit。这个仓库的 Release 是 `v1.0.6`。
 
 ## 指令
 
 | 指令 | 说明 |
 | --- | --- |
 | `/晚霞 上海` | 今明两天晚霞 |
-| `/火烧云 广州` | 同上 |
+| `/晚霞 肇庆` | 同上 |
+| `/晚霞诊断 肇庆` | 看版本和城市表是否命中 |
+| `/火烧云 广州` | 同晚霞 |
 | `/云海` | 默认新兴风车山云海 |
-| `/云海 风车山` | 指定观景点 |
 | `/晚霞云海 广州` | 广州晚霞 + 默认云海点 |
-
-插件配置里可改默认城市、默认观景点、预报天数。
 
 ## 本地命令行
 
 ```powershell
 python predict.py 上海
+python predict.py 肇庆
 python predict.py 新兴风车山
-python predict.py --kind both
 ```
-
-无第三方依赖，Python 3.10+ 即可。
