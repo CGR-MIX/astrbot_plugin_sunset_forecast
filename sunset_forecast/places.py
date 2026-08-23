@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .prefectures import PREFECTURES
+
 # 少量手写覆盖，优先级高于数据包。
 BUILTIN_CITIES: dict[str, tuple[float, float, str, int]] = {
     "北京": (39.9042, 116.4074, "北京", 21540000),
@@ -79,14 +81,35 @@ def geocode_query_variants(location: str) -> list[str]:
     return variants
 
 
+def _read_city_json() -> dict[str, list]:
+    here = Path(__file__).resolve().parent
+    candidates: list[Path] = [
+        here / "data" / "china_cities.json",
+        here.parent / "sunset_forecast" / "data" / "china_cities.json",
+    ]
+    try:
+        from importlib.resources import files
+
+        resource = files("sunset_forecast").joinpath("data/china_cities.json")
+        if hasattr(resource, "read_text"):
+            return json.loads(resource.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ModuleNotFoundError, OSError, ValueError, TypeError, json.JSONDecodeError):
+        pass
+    for path in candidates:
+        try:
+            if path.is_file():
+                return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+    return {}
+
+
 def _load_cities() -> dict[str, list]:
     global _CITIES
     if _CITIES is not None:
         return _CITIES
-    path = Path(__file__).resolve().parent / "data" / "china_cities.json"
-    loaded: dict[str, list] = {}
-    if path.exists():
-        loaded = json.loads(path.read_text(encoding="utf-8"))
+    loaded: dict[str, list] = {name: list(row) for name, row in PREFECTURES.items()}
+    loaded.update(_read_city_json())
     for name, (lat, lng, admin1, _pop) in BUILTIN_CITIES.items():
         loaded[name] = [lat, lng, admin1]
     _CITIES = loaded

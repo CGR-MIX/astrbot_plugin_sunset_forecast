@@ -46,6 +46,21 @@ class PlaceLookupTests(unittest.TestCase):
     def test_unknown_builtin(self):
         self.assertIsNone(lookup_builtin_city("阿巴嘎旗某某不存在"))
 
+    def test_zhaoqing_works_without_county_json(self):
+        from sunset_forecast import places
+
+        places._CITIES = None
+        try:
+            original = places._read_city_json
+            places._read_city_json = lambda: {}
+            places._CITIES = None
+            place = lookup_builtin_city("肇庆")
+            self.assertIsNotNone(place)
+            self.assertEqual(place.admin1, "广东")
+        finally:
+            places._read_city_json = original
+            places._CITIES = None
+
 
 if __name__ == "__main__":
     unittest.main()

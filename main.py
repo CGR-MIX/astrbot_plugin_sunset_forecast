@@ -85,12 +85,12 @@ async def _run(func, *args, **kwargs):
     )
 
 
-@register("sunset_forecast", "ChanGR", "晚霞与云海预报", "1.0.3")
+@register("sunset_forecast", "ChanGR", "晚霞与云海预报", "1.0.4")
 class SunsetForecastPlugin(Star):
     def __init__(self, context: Context, config=None):
         super().__init__(context)
         self.config = config
-        logger.info("插件 [sunset_forecast] v1.0.3 已加载。")
+        logger.info("插件 [sunset_forecast] v1.0.4 已加载。")
 
     def _days(self) -> int:
         try:
@@ -99,16 +99,24 @@ class SunsetForecastPlugin(Star):
             days = 2
         return min(max(days, 1), 2)
 
-    def _city(self, event: AstrMessageEvent) -> str:
-        return _rest_arg(event) or str(_cfg(self.config, "default_city", "上海"))
+    def _city(self, event: AstrMessageEvent, extra: str = "") -> str:
+        return (
+            (extra or "").strip()
+            or _rest_arg(event)
+            or str(_cfg(self.config, "default_city", "上海"))
+        )
 
-    def _spot(self, event: AstrMessageEvent) -> str:
-        return _rest_arg(event) or str(_cfg(self.config, "default_cloudsea", "新兴风车山"))
+    def _spot(self, event: AstrMessageEvent, extra: str = "") -> str:
+        return (
+            (extra or "").strip()
+            or _rest_arg(event)
+            or str(_cfg(self.config, "default_cloudsea", "新兴风车山"))
+        )
 
     @filter.command("晚霞")
-    async def cmd_sunset(self, event: AstrMessageEvent):
+    async def cmd_sunset(self, event: AstrMessageEvent, city: str = ""):
         """查询今晚/明天晚霞评分和概率。例：/晚霞 上海"""
-        location = self._city(event)
+        location = self._city(event, city)
         if resolve_spot(location):
             yield event.plain_result(
                 f"「{location}」是云海观景点。查云海请用 /云海 {location}，晚霞请写城市，例如 /晚霞 广州"
@@ -126,15 +134,15 @@ class SunsetForecastPlugin(Star):
             yield event.plain_result("晚霞查询出错了，请稍后再试。")
 
     @filter.command("火烧云")
-    async def cmd_huoshaoyun(self, event: AstrMessageEvent):
+    async def cmd_huoshaoyun(self, event: AstrMessageEvent, city: str = ""):
         """查询今晚/明天晚霞评分和概率。例：/火烧云 广州"""
-        async for item in self.cmd_sunset(event):
+        async for item in self.cmd_sunset(event, city):
             yield item
 
     @filter.command("云海")
-    async def cmd_cloudsea(self, event: AstrMessageEvent):
+    async def cmd_cloudsea(self, event: AstrMessageEvent, spot: str = ""):
         """查询云海出现概率。默认新兴风车山。例：/云海  或  /云海 风车山"""
-        spot = self._spot(event)
+        spot = self._spot(event, spot)
         try:
             days = await _run(forecast_cloud_sea, spot, days=self._days())
             yield event.plain_result(format_cloudsea_chat(days))
@@ -147,9 +155,9 @@ class SunsetForecastPlugin(Star):
             yield event.plain_result("云海查询出错了，请稍后再试。")
 
     @filter.command("晚霞云海")
-    async def cmd_both(self, event: AstrMessageEvent):
+    async def cmd_both(self, event: AstrMessageEvent, city: str = ""):
         """同时查晚霞和默认观景点云海。例：/晚霞云海 广州"""
-        city = self._city(event)
+        city = self._city(event, city)
         spot = str(_cfg(self.config, "default_cloudsea", "新兴风车山"))
         if resolve_spot(city):
             spot = city
