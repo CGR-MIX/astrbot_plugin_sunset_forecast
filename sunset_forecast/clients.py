@@ -14,6 +14,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from .cloudsea import PRESSURE_LEVELS, CloudSeaSample, PressureLevel
+from .places import BUILTIN_CITIES, city_key, geocode_query_variants
 from .scoring import HourSample, parse_labeled_number
 from .spots import ViewSpot
 
@@ -192,35 +193,66 @@ def place_from_spot(spot: ViewSpot) -> GeoPlace:
     )
 
 
-def geocode(location: str) -> GeoPlace:
-    params = urllib.parse.urlencode(
-        {
-            "name": location.strip(),
-            "count": 8,
-            "language": "zh",
-            "format": "json",
-        }
-    )
-    payload = http_get_json(f"{GEOCODE_URL}?{params}")
-    results = payload.get("results") or []
-    if not results:
-        raise ForecastError(f"找不到地点：{location}")
-
-    def rank(item: dict[str, Any]) -> tuple[int, int]:
-        country_boost = 1 if item.get("country_code") == "CN" else 0
-        population = int(item.get("population") or 0)
-        return (country_boost, population)
-
-    best = max(results, key=rank)
+def lookup_builtin_city(location: str) -> GeoPlace | None:
+    key = city_key(location)
+    row = BUILTIN_CITIES.get(key)
+    if row is None:
+        return None
+    lat, lng, admin1, population = row
     return GeoPlace(
-        name=str(best.get("name") or location),
-        latitude=float(best["latitude"]),
-        longitude=float(best["longitude"]),
-        timezone=str(best.get("timezone") or "Asia/Shanghai"),
-        country=best.get("country"),
-        admin1=best.get("admin1"),
-        population=int(best.get("population") or 0),
+        name=key,
+        latitude=lat,
+        longitude=lng,
+        timezone="Asia/Shanghai",
+        country="中国",
+        admin1=admin1,
+        population=population,
     )
+
+
+def geocode(location: str) -> GeoPlace:
+    builtin = lookup_builtin_city(location)
+    if builtin is not None:
+        return builtin
+    last_empty = True
+    for query in geocode_query_variants(location):
+        params = urllib.parse.urlencode(
+            {
+                "name": query,
+                "count": 8,
+                "language": "zh",
+                "format": "json",
+            }
+        )
+        payload = http_get_json(f"{GEOCODE_URL}?{params}")
+        results = payload.get("results") or []
+        if not results:
+            continue
+        last_empty = False
+
+        def rank(item: dict[str, Any]) -> tuple[int, int, int]:
+            country_boost = 1 if item.get("country_code") == "CN" else 0
+            population = int(item.get("population") or 0)
+            name = str(item.get("name") or "")
+            exact = 1 if city_key(name) == city_key(location) else 0
+            return (country_boost, exact, population)
+
+        best = max(results, key=rank)
+        return GeoPlace(
+            name=str(best.get("name") or location),
+            latitude=float(best["latitude"]),
+            longitude=float(best["longitude"]),
+            timezone=str(best.get("timezone") or "Asia/Shanghai"),
+            country=best.get("country"),
+            admin1=best.get("admin1"),
+            population=int(best.get("population") or 0),
+        )
+    if last_empty:
+        raise ForecastError(
+            f"找不到地点：{location}。可改成「{city_key(location)}市」，"
+            "或用区县名（SunsetBot 收录的写法）。"
+        )
+    raise ForecastError(f"找不到地点：{location}")
 
 
 def _parse_local(text: str) -> datetime:

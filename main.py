@@ -85,12 +85,12 @@ async def _run(func, *args, **kwargs):
     )
 
 
-@register("sunset_forecast", "ChanGR", "晚霞与云海预报", "1.0.1")
+@register("sunset_forecast", "ChanGR", "晚霞与云海预报", "1.0.2")
 class SunsetForecastPlugin(Star):
     def __init__(self, context: Context, config=None):
         super().__init__(context)
         self.config = config
-        logger.info("插件 [sunset_forecast] v1.0.1 已加载。")
+        logger.info("插件 [sunset_forecast] v1.0.2 已加载。")
 
     def _days(self) -> int:
         try:
