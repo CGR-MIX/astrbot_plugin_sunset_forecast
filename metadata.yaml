@@ -1,0 +1,12 @@
+name: sunset_forecast
+display_name: 晚霞云海预报
+author: ChanGR
+desc: 查询指定城市晚霞评分/概率，以及新兴风车山等点位的云海出现概率。数据来自 SunsetBot 与 Open-Meteo。
+short_desc: 晚霞评分 + 风车山云海概率
+version: v1.0.0
+repo: https://github.com/CGR-MIX/astrbot_plugin_sunset_forecast
+help: |
+  /晚霞 上海
+  /云海
+  /云海 新兴风车山
+  /晚霞云海 广州

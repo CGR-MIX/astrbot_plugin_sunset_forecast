@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+data/daily.log
+data/history.jsonl
+data/latest.txt
+data/latest.md
+data/latest.json
+data/cloudsea-latest.txt
+data/cloudsea-latest.md
+data/cloudsea-latest.json
+*.log
+.DS_Store

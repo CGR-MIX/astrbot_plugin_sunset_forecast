@@ -1,0 +1,84 @@
+# 把本目录作为仓库根目录推到 GitHub 后即可用。
+# 定时：每天 14:30 中国时区 = 06:30 UTC。
+# 手动：Actions → daily-sunset-forecast → Run workflow。
+# 若这是 monorepo 子目录，把 defaults.run.working-directory 改成 sunset-forecast。
+
+name: daily-sunset-forecast
+
+on:
+  schedule:
+    - cron: "30 6 * * *"
+  workflow_dispatch:
+    inputs:
+      location:
+        description: "城市，例如 上海 / 广州 / 北京-朝阳区"
+        required: false
+        default: "上海"
+      days:
+        description: "预报天数"
+        required: false
+        default: "2"
+      commit_history:
+        description: "把 latest 文件和 history 提交回仓库"
+        type: boolean
+        default: true
+
+concurrency:
+  group: sunset-forecast-daily
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  forecast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUNSET_LOCATION: ${{ github.event.inputs.location || vars.SUNSET_LOCATION || '上海' }}
+      CLOUDSEA_LOCATION: ${{ vars.CLOUDSEA_LOCATION || '新兴风车山' }}
+      SUNSET_DAYS: ${{ github.event.inputs.days || '2' }}
+      SUNSET_KIND: both
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Predict sunset and cloud sea
+        run: >
+          python predict.py
+          --kind both
+          --save
+          --output-dir data
+          --github-summary
+          --markdown
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: sunset-forecast-${{ github.run_id }}
+          path: |
+            data/latest.md
+            data/latest.json
+            data/latest.txt
+            data/cloudsea-latest.md
+            data/cloudsea-latest.json
+            data/cloudsea-latest.txt
+            data/history.jsonl
+          if-no-files-found: error
+
+      - name: Commit latest report
+        if: github.event_name == 'schedule' || github.event.inputs.commit_history != 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/history.jsonl data/latest.md data/latest.json data/latest.txt data/cloudsea-latest.md data/cloudsea-latest.json data/cloudsea-latest.txt
+          if git diff --cached --quiet; then
+            echo "没有需要提交的预报文件"
+            exit 0
+          fi
+          git commit -m "chore: ${SUNSET_LOCATION} sunset forecast $(date -u +%Y-%m-%d)"
+          git push
