@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from .cloudsea import PRESSURE_LEVELS, CloudSeaSample, PressureLevel
-from .places import BUILTIN_CITIES, city_key, geocode_query_variants
+from .places import city_key, geocode_query_variants, lookup_china_city
 from .scoring import HourSample, parse_labeled_number
 from .spots import ViewSpot
 
@@ -193,28 +193,26 @@ def place_from_spot(spot: ViewSpot) -> GeoPlace:
     )
 
 
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+
+
 def lookup_builtin_city(location: str) -> GeoPlace | None:
-    key = city_key(location)
-    row = BUILTIN_CITIES.get(key)
-    if row is None:
+    hit = lookup_china_city(location)
+    if hit is None:
         return None
-    lat, lng, admin1, population = row
+    lat, lng, admin1, display = hit
     return GeoPlace(
-        name=key,
+        name=display,
         latitude=lat,
         longitude=lng,
         timezone="Asia/Shanghai",
         country="中国",
         admin1=admin1,
-        population=population,
+        population=0,
     )
 
 
-def geocode(location: str) -> GeoPlace:
-    builtin = lookup_builtin_city(location)
-    if builtin is not None:
-        return builtin
-    last_empty = True
+def _openmeteo_geocode(location: str) -> GeoPlace | None:
     for query in geocode_query_variants(location):
         params = urllib.parse.urlencode(
             {
@@ -228,16 +226,18 @@ def geocode(location: str) -> GeoPlace:
         results = payload.get("results") or []
         if not results:
             continue
-        last_empty = False
 
         def rank(item: dict[str, Any]) -> tuple[int, int, int]:
-            country_boost = 1 if item.get("country_code") == "CN" else 0
+            country_boost = 1 if item.get("country_code") in {"CN", "HK", "MO", "TW"} else 0
             population = int(item.get("population") or 0)
             name = str(item.get("name") or "")
             exact = 1 if city_key(name) == city_key(location) else 0
             return (country_boost, exact, population)
 
         best = max(results, key=rank)
+        cc = str(best.get("country_code") or "")
+        if cc not in {"CN", "HK", "MO", "TW"}:
+            continue
         return GeoPlace(
             name=str(best.get("name") or location),
             latitude=float(best["latitude"]),
@@ -247,12 +247,56 @@ def geocode(location: str) -> GeoPlace:
             admin1=best.get("admin1"),
             population=int(best.get("population") or 0),
         )
-    if last_empty:
-        raise ForecastError(
-            f"找不到地点：{location}。可改成「{city_key(location)}市」，"
-            "或用区县名（SunsetBot 收录的写法）。"
-        )
-    raise ForecastError(f"找不到地点：{location}")
+    return None
+
+
+def _nominatim_china(location: str) -> GeoPlace | None:
+    params = urllib.parse.urlencode(
+        {
+            "q": f"{location},中国",
+            "format": "json",
+            "limit": 5,
+            "countrycodes": "cn,hk,mo,tw",
+            "accept-language": "zh",
+        }
+    )
+    try:
+        payload = http_get_json(f"{NOMINATIM_URL}?{params}", timeout=8, retries=1)
+    except ForecastError:
+        return None
+    if not isinstance(payload, list) or not payload:
+        return None
+    best = payload[0]
+    try:
+        lat = float(best["lat"])
+        lng = float(best["lon"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    display = str(best.get("name") or location)
+    return GeoPlace(
+        name=city_key(location) or display,
+        latitude=lat,
+        longitude=lng,
+        timezone="Asia/Shanghai",
+        country="中国",
+        admin1=None,
+        population=0,
+    )
+
+
+def geocode(location: str) -> GeoPlace:
+    builtin = lookup_builtin_city(location)
+    if builtin is not None:
+        return builtin
+    remote = _openmeteo_geocode(location)
+    if remote is not None:
+        return remote
+    nominatim = _nominatim_china(location)
+    if nominatim is not None:
+        return nominatim
+    raise ForecastError(
+        f"找不到地点：{location}。请用国内城市或区县名，例如「肇庆」「拉萨」「喀什」。"
+    )
 
 
 def _parse_local(text: str) -> datetime:

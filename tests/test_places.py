@@ -20,18 +20,31 @@ class PlaceLookupTests(unittest.TestCase):
         self.assertEqual(city_key("广州市"), "广州")
         self.assertEqual(city_key("肇庆市"), "肇庆")
 
-    def test_builtin_zhaoqing_and_guangzhou(self):
-        zhaoqing = lookup_builtin_city("肇庆")
-        guangzhou = lookup_builtin_city("广州")
-        zhaoqing_shi = lookup_builtin_city("肇庆市")
-        self.assertIsNotNone(zhaoqing)
-        self.assertIsNotNone(guangzhou)
-        self.assertEqual(zhaoqing.admin1, "广东")
-        self.assertEqual(zhaoqing_shi.name, "肇庆")
-        self.assertGreater(guangzhou.population, zhaoqing.population)
+    def test_builtin_covers_prefecture_and_county(self):
+        cases = {
+            "广州": "广东",
+            "肇庆": "广东",
+            "肇庆市": "广东",
+            "广东肇庆": "广东",
+            "拉萨": "西藏",
+            "喀什": "新疆",
+            "西双版纳": "云南",
+            "恩施": "湖北",
+            "锡林浩特": "内蒙古",
+            "义乌": "浙江",
+            "昆山": "江苏",
+            "香港": "香港",
+            "台北": "台湾",
+        }
+        for name, admin1 in cases.items():
+            place = lookup_builtin_city(name)
+            self.assertIsNotNone(place, name)
+            self.assertEqual(place.admin1, admin1, name)
+            self.assertTrue(15 < place.latitude < 55, name)
+            self.assertTrue(73 < place.longitude < 136, name)
 
     def test_unknown_builtin(self):
-        self.assertIsNone(lookup_builtin_city("阿巴嘎旗"))
+        self.assertIsNone(lookup_builtin_city("阿巴嘎旗某某不存在"))
 
 
 if __name__ == "__main__":
