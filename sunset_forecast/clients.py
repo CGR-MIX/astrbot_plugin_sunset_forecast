@@ -8,6 +8,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -80,7 +81,7 @@ class CloudSeaBundle:
     samples: list[CloudSeaSample]
 
 
-def http_get_json(url: str, timeout: int = 20, retries: int = 3) -> Any:
+def http_get_json(url: str, timeout: int = 8, retries: int = 2) -> Any:
     last_error: Exception | None = None
     for attempt in range(1, retries + 1):
         request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
@@ -148,7 +149,7 @@ def query_sunsetbot(
                 "model": model,
             }
         )
-        payload = http_get_json(f"{SUNSETBOT_URL}?{params}")
+        payload = http_get_json(f"{SUNSETBOT_URL}?{params}", timeout=8, retries=1)
         status = str(payload.get("status") or "")
         quality_text = str(payload.get("tb_quality") or "")
         aod_text = str(payload.get("tb_aod") or "")
@@ -238,7 +239,15 @@ def _nearest_hour_index(times: list[str], target: datetime) -> int:
     return best_i
 
 
-def fetch_meteo(place: GeoPlace, target_date: date, forecast_days: int = 3) -> MeteoBundle:
+@dataclass(frozen=True)
+class MeteoSeries:
+    place: GeoPlace
+    samples: list[HourSample]
+    sunrises: dict[str, datetime]
+    sunsets: dict[str, datetime]
+
+
+def fetch_meteo_series(place: GeoPlace, forecast_days: int = 3) -> MeteoSeries:
     forecast_params = urllib.parse.urlencode(
         {
             "latitude": f"{place.latitude:.5f}",
@@ -260,16 +269,6 @@ def fetch_meteo(place: GeoPlace, target_date: date, forecast_days: int = 3) -> M
             "forecast_days": str(max(forecast_days, 1)),
         }
     )
-    forecast = http_get_json(f"{FORECAST_URL}?{forecast_params}")
-    daily = forecast.get("daily") or {}
-    dates = daily.get("time") or []
-    if target_date.isoformat() not in dates:
-        raise ForecastError(f"Open-Meteo 没有 {target_date.isoformat()} 的日落数据")
-    day_index = dates.index(target_date.isoformat())
-    sunset_local = _parse_local(daily["sunset"][day_index])
-    sunrise_local = _parse_local(daily["sunrise"][day_index])
-
-    aod_by_time: dict[str, float] = {}
     air_params = urllib.parse.urlencode(
         {
             "latitude": f"{place.latitude:.5f}",
@@ -279,15 +278,38 @@ def fetch_meteo(place: GeoPlace, target_date: date, forecast_days: int = 3) -> M
             "forecast_days": str(max(forecast_days, 1)),
         }
     )
-    try:
-        air = http_get_json(f"{AIR_URL}?{air_params}")
-        air_hourly = air.get("hourly") or {}
-        for stamp, value in zip(air_hourly.get("time") or [], air_hourly.get("aerosol_optical_depth") or []):
-            if value is not None:
-                aod_by_time[stamp] = float(value)
-    except ForecastError:
-        aod_by_time = {}
 
+    def _air() -> dict[str, float]:
+        try:
+            air = http_get_json(f"{AIR_URL}?{air_params}")
+        except ForecastError:
+            return {}
+        hourly_air = air.get("hourly") or {}
+        out: dict[str, float] = {}
+        for stamp, value in zip(
+            hourly_air.get("time") or [],
+            hourly_air.get("aerosol_optical_depth") or [],
+        ):
+            if value is not None:
+                out[stamp] = float(value)
+        return out
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        fut_forecast = pool.submit(http_get_json, f"{FORECAST_URL}?{forecast_params}")
+        fut_air = pool.submit(_air)
+        forecast = fut_forecast.result()
+        aod_by_time = fut_air.result()
+
+    daily = forecast.get("daily") or {}
+    dates = daily.get("time") or []
+    sunrises = {
+        day: _parse_local(stamp)
+        for day, stamp in zip(dates, daily.get("sunrise") or [])
+    }
+    sunsets = {
+        day: _parse_local(stamp)
+        for day, stamp in zip(dates, daily.get("sunset") or [])
+    }
     hourly = forecast.get("hourly") or {}
     times = hourly.get("time") or []
     samples: list[HourSample] = []
@@ -308,14 +330,28 @@ def fetch_meteo(place: GeoPlace, target_date: date, forecast_days: int = 3) -> M
         )
     if not samples:
         raise ForecastError("Open-Meteo 没有小时云量数据")
-    sunset_index = _nearest_hour_index(times, sunset_local)
+    return MeteoSeries(place=place, samples=samples, sunrises=sunrises, sunsets=sunsets)
+
+
+def slice_meteo(series: MeteoSeries, target_date: date) -> MeteoBundle:
+    key = target_date.isoformat()
+    if key not in series.sunsets:
+        raise ForecastError(f"Open-Meteo 没有 {key} 的日落数据")
+    sunset_local = series.sunsets[key]
+    sunrise_local = series.sunrises[key]
+    times = [item.time for item in series.samples]
     return MeteoBundle(
-        place=place,
+        place=series.place,
         sunset_local=sunset_local,
         sunrise_local=sunrise_local,
-        samples=samples,
-        sunset_index=sunset_index,
+        samples=series.samples,
+        sunset_index=_nearest_hour_index(times, sunset_local),
     )
+
+
+def fetch_meteo(place: GeoPlace, target_date: date, forecast_days: int = 3) -> MeteoBundle:
+    series = fetch_meteo_series(place, forecast_days=forecast_days)
+    return slice_meteo(series, target_date)
 
 
 def fetch_cloudsea_meteo(

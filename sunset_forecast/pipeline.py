@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
 from .clients import (
     ForecastError,
     GeoPlace,
-    event_for_offset,
+    SunsetBotReading,
     cloudsea_sunrise_index,
+    event_for_offset,
     fetch_cloudsea_meteo,
-    fetch_meteo,
+    fetch_meteo_series,
     geocode,
     local_today,
     place_from_spot,
     query_sunsetbot,
+    slice_meteo,
 )
 from .cloudsea import pick_best_morning
 from .report import CloudSeaDay, DayForecast, build_cloudsea_day, build_day_forecast
@@ -26,6 +30,31 @@ from .scoring import (
 )
 from .spots import SPOTS, resolve_spot
 
+_CACHE: dict[tuple, tuple[float, object]] = {}
+_CACHE_TTL_SEC = 180.0
+
+
+def _cache_get(key: tuple):
+    item = _CACHE.get(key)
+    if item is None:
+        return None
+    saved_at, value = item
+    if time.time() - saved_at > _CACHE_TTL_SEC:
+        _CACHE.pop(key, None)
+        return None
+    return value
+
+
+def _cache_set(key: tuple, value: object) -> None:
+    _CACHE[key] = (time.time(), value)
+
+
+def _sunsetbot_safe(location: str, event: str, model: str) -> SunsetBotReading | None:
+    try:
+        return query_sunsetbot(location, event=event, model=model)
+    except ForecastError:
+        return None
+
 
 def forecast_location(
     location: str,
@@ -35,33 +64,45 @@ def forecast_location(
 ) -> list[DayForecast]:
     if days < 1 or days > 7:
         raise ForecastError("days 必须在 1–7 之间")
-    place = geocode(location)
-    today = local_today(place.timezone)
+    cache_key = ("sunset", location, days, models)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        fut_geo = pool.submit(geocode, location)
+        bot_futs: dict[tuple[int, str], object] = {}
+        for offset in range(min(days, 2)):
+            for model in models:
+                bot_futs[(offset, model)] = pool.submit(
+                    _sunsetbot_safe,
+                    location,
+                    event_for_offset(offset),
+                    model,
+                )
+        place = fut_geo.result()
+        today = local_today(place.timezone)
+        series = pool.submit(fetch_meteo_series, place, max(days, 3)).result()
+        bot_readings = {key: fut.result() for key, fut in bot_futs.items()}
+
     reports: list[DayForecast] = []
     for offset in range(days):
         target = today + timedelta(days=offset)
-        meteo = fetch_meteo(place, target, forecast_days=max(days, 3))
+        meteo = slice_meteo(series, target)
         engine = score_hour_samples(meteo.samples, meteo.sunset_index)
-        readings: dict = {}
-        for model in models:
-            if offset <= 1:
-                try:
-                    readings[model] = query_sunsetbot(
-                        location,
-                        event=event_for_offset(offset),
-                        model=model,
-                    )
-                except ForecastError:
-                    readings[model] = None
-            else:
-                readings[model] = None
+        readings = {
+            model: bot_readings.get((offset, model))
+            for model in models
+        }
         gfs = readings.get("GFS")
         ec = readings.get("EC")
         gfs_v = gfs.vividness if gfs is not None and gfs.status == "ok" else None
         ec_v = ec.vividness if ec is not None and ec.status == "ok" else None
         blended = blend_vividness(gfs_v, ec_v)
         p_visible, p_worth, confidence = combine_probabilities(engine, blended)
-        advice = advice_from_probs(p_visible, p_worth, blended if blended is not None else 0.0)
+        advice = advice_from_probs(
+            p_visible, p_worth, blended if blended is not None else 0.0
+        )
         reports.append(
             build_day_forecast(
                 day_offset=offset,
@@ -79,6 +120,7 @@ def forecast_location(
                 advice=advice,
             )
         )
+    _cache_set(cache_key, reports)
     return reports
 
 
@@ -134,6 +176,10 @@ def forecast_cloud_sea(
 ) -> list[CloudSeaDay]:
     if days < 1 or days > 7:
         raise ForecastError("days 必须在 1–7 之间")
+    cache_key = ("cloudsea", location, days, latitude, longitude, peak_m, valley_m)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
     place, peak, valley, spot_name, note = resolve_cloudsea_target(
         location,
         latitude=latitude,
@@ -173,4 +219,5 @@ def forecast_cloud_sea(
                 result=result,
             )
         )
+    _cache_set(cache_key, reports)
     return reports
