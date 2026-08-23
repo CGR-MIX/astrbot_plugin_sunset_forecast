@@ -22,8 +22,12 @@ def _ensure_lib_on_path() -> None:
     for root in candidates:
         if (root / "sunset_forecast" / "pipeline.py").exists():
             resolved = str(root)
-            if resolved not in sys.path:
-                sys.path.insert(0, resolved)
+            if resolved in sys.path:
+                sys.path.remove(resolved)
+            sys.path.insert(0, resolved)
+            for name in list(sys.modules):
+                if name == "sunset_forecast" or name.startswith("sunset_forecast."):
+                    del sys.modules[name]
             return
     raise RuntimeError(
         "找不到 sunset_forecast 包。请把仓库里的 sunset_forecast 目录放到本插件旁，"
@@ -37,13 +41,15 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
-from sunset_forecast.clients import ForecastError
+from sunset_forecast.clients import ForecastError, geocode
 from sunset_forecast.pipeline import forecast_cloud_sea, forecast_location
+from sunset_forecast.places import _load_cities, lookup_china_city
 from sunset_forecast.report import format_cloudsea_chat, format_sunset_chat
 from sunset_forecast.spots import resolve_spot
 
 COMMAND_PREFIXES = (
     "晚霞云海",
+    "晚霞诊断",
     "火烧云",
     "晚霞",
     "云海",
@@ -63,13 +69,31 @@ def _cfg(config, key: str, default):
     return default if value is None or value == "" else value
 
 
-def _rest_arg(event: AstrMessageEvent) -> str:
-    text = ""
+def _event_text(event: AstrMessageEvent) -> str:
+    chunks: list[str] = []
     if hasattr(event, "get_message_str"):
-        text = event.get_message_str() or ""
-    elif hasattr(event, "message_str"):
-        text = event.message_str or ""
-    text = str(text).strip()
+        chunks.append(str(event.get_message_str() or ""))
+    if hasattr(event, "message_str"):
+        chunks.append(str(event.message_str or ""))
+    obj = getattr(event, "message_obj", None)
+    if obj is not None:
+        chunks.append(str(getattr(obj, "message_str", "") or ""))
+        raw = getattr(obj, "message", None)
+        if isinstance(raw, str):
+            chunks.append(raw)
+        elif isinstance(raw, list):
+            for item in raw:
+                if isinstance(item, str):
+                    chunks.append(item)
+                elif isinstance(item, dict):
+                    chunks.append(str(item.get("text") or item.get("content") or ""))
+                else:
+                    chunks.append(str(getattr(item, "text", "") or ""))
+    return " ".join(chunk for chunk in chunks if chunk).strip()
+
+
+def _rest_arg(event: AstrMessageEvent) -> str:
+    text = _event_text(event)
     if text.startswith("/"):
         text = text[1:].strip()
     for prefix in COMMAND_PREFIXES:
@@ -85,12 +109,13 @@ async def _run(func, *args, **kwargs):
     )
 
 
-@register("sunset_forecast", "ChanGR", "晚霞与云海预报", "1.0.4")
+@register("sunset_forecast", "ChanGR", "晚霞与云海预报", "1.0.5")
 class SunsetForecastPlugin(Star):
     def __init__(self, context: Context, config=None):
         super().__init__(context)
         self.config = config
-        logger.info("插件 [sunset_forecast] v1.0.4 已加载。")
+        n_cities = len(_load_cities())
+        logger.info("插件 [sunset_forecast] v1.0.5 已加载，城市表 %s 条。", n_cities)
 
     def _days(self) -> int:
         try:
@@ -100,11 +125,12 @@ class SunsetForecastPlugin(Star):
         return min(max(days, 1), 2)
 
     def _city(self, event: AstrMessageEvent, extra: str = "") -> str:
-        return (
-            (extra or "").strip()
-            or _rest_arg(event)
-            or str(_cfg(self.config, "default_city", "上海"))
-        )
+        raw = (extra or "").strip() or _rest_arg(event)
+        hit = lookup_china_city(raw) if raw else None
+        if hit is not None:
+            return hit[3]
+        cleaned = raw.strip() if raw else ""
+        return cleaned or str(_cfg(self.config, "default_city", "上海"))
 
     def _spot(self, event: AstrMessageEvent, extra: str = "") -> str:
         return (
@@ -132,6 +158,25 @@ class SunsetForecastPlugin(Star):
         except Exception:
             logger.exception("晚霞查询异常")
             yield event.plain_result("晚霞查询出错了，请稍后再试。")
+
+    @filter.command("晚霞诊断")
+    async def cmd_diag(self, event: AstrMessageEvent, city: str = ""):
+        """检查插件版本、城市表，以及某个地名能不能定位。例：/晚霞诊断 肇庆"""
+        raw = (city or "").strip() or _rest_arg(event) or "肇庆"
+        cities = _load_cities()
+        hit = lookup_china_city(raw)
+        try:
+            place = geocode(raw)
+            geo_line = f"{place.admin1}/{place.name} {place.latitude:.4f},{place.longitude:.4f}"
+        except Exception as exc:
+            geo_line = f"失败：{exc}"
+        yield event.plain_result(
+            "晚霞插件诊断 v1.0.5\n"
+            f"城市表 {len(cities)} 条\n"
+            f"原始输入 {raw!r}\n"
+            f"表内命中 {hit}\n"
+            f"定位结果 {geo_line}"
+        )
 
     @filter.command("火烧云")
     async def cmd_huoshaoyun(self, event: AstrMessageEvent, city: str = ""):

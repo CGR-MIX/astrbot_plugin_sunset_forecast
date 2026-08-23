@@ -28,6 +28,7 @@ from .scoring import (
     combine_probabilities,
     score_hour_samples,
 )
+from .places import lookup_china_city
 from .spots import SPOTS, resolve_spot
 
 _CACHE: dict[tuple, tuple[float, object]] = {}
@@ -64,6 +65,9 @@ def forecast_location(
 ) -> list[DayForecast]:
     if days < 1 or days > 7:
         raise ForecastError("days 必须在 1–7 之间")
+    hit = lookup_china_city(location)
+    if hit is not None:
+        location = hit[3]
     cache_key = ("sunset", location, days, models)
     cached = _cache_get(cache_key)
     if cached is not None:

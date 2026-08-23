@@ -6,8 +6,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from sunset_forecast.clients import lookup_builtin_city
-from sunset_forecast.places import city_key, geocode_query_variants
+from sunset_forecast.clients import geocode, lookup_builtin_city
+from sunset_forecast.places import city_key, geocode_query_variants, lookup_china_city
 
 
 class PlaceLookupTests(unittest.TestCase):
@@ -44,7 +44,7 @@ class PlaceLookupTests(unittest.TestCase):
             self.assertTrue(73 < place.longitude < 136, name)
 
     def test_unknown_builtin(self):
-        self.assertIsNone(lookup_builtin_city("阿巴嘎旗某某不存在"))
+        self.assertIsNone(lookup_builtin_city("火星基地xyz123"))
 
     def test_zhaoqing_works_without_county_json(self):
         from sunset_forecast import places
@@ -60,6 +60,22 @@ class PlaceLookupTests(unittest.TestCase):
         finally:
             places._read_city_json = original
             places._CITIES = None
+
+    def test_zhaoqing_from_messy_chat_text(self):
+        samples = [
+            "/晚霞 肇庆",
+            "晚霞 肇庆",
+            "[CQ:at,qq=123456] /晚霞 肇庆",
+            "@机器人 晚霞 肇庆",
+            "查一下肇庆",
+        ]
+        for text in samples:
+            hit = lookup_china_city(text)
+            self.assertIsNotNone(hit, text)
+            self.assertEqual(hit[2], "广东", text)
+            self.assertEqual(hit[3], "肇庆", text)
+            place = geocode(text)
+            self.assertEqual(place.admin1, "广东", text)
 
 
 if __name__ == "__main__":

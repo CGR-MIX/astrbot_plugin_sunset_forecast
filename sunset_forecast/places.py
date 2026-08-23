@@ -18,6 +18,10 @@ BUILTIN_CITIES: dict[str, tuple[float, float, str, int]] = {
     "广州": (23.1291, 113.2644, "广东", 16090000),
     "深圳": (22.5431, 114.0579, "广东", 17560000),
     "杭州": (30.2741, 120.1551, "浙江", 11936000),
+    "肇庆": (23.0472, 112.4653, "广东", 4114000),
+    "佛山": (23.0218, 113.1219, "广东", 9498000),
+    "云浮": (22.9150, 112.0445, "广东", 2383000),
+    "清远": (23.6820, 113.0560, "广东", 3969000),
 }
 
 PROVINCES: tuple[str, ...] = (
@@ -127,16 +131,56 @@ def _unique(items: list[str]) -> list[str]:
     return out
 
 
+def normalize_query(location: str) -> str:
+    """去掉指令词、@、CQ 码，留下城市名。"""
+    import re
+
+    text = location or ""
+    text = re.sub(r"\[CQ:[^\]]+\]", " ", text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"@\S+", " ", text)
+    for token in ("/", "／", "#", ",", "，", "。", "·", "-", "_"):
+        text = text.replace(token, " ")
+    for prefix in (
+        "晚霞云海",
+        "晚霞诊断",
+        "火烧云",
+        "晚霞",
+        "云海",
+        "sunset",
+        "cloudsea",
+        "查询",
+        "查一下",
+        "诊断",
+    ):
+        text = text.replace(prefix, " ")
+    return "".join(text.split())
+
+
 def lookup_keys(location: str) -> list[str]:
-    compact = location.strip().replace(" ", "").replace("　", "").replace("-", "").replace("·", "")
-    keys = geocode_query_variants(compact)
-    keys.append(city_key(compact))
-    for prov in PROVINCES:
-        if compact.startswith(prov) and len(compact) > len(prov):
-            rest = compact[len(prov) :]
-            keys.extend(geocode_query_variants(rest))
-            keys.append(prov + city_key(rest))
+    compact = normalize_query(location)
+    raw = location.strip().replace(" ", "").replace("　", "").replace("-", "").replace("·", "")
+    keys: list[str] = []
+    for compact_item in (compact, raw, location.strip()):
+        keys.extend(geocode_query_variants(compact_item))
+        keys.append(city_key(compact_item))
+        for prov in PROVINCES:
+            if compact_item.startswith(prov) and len(compact_item) > len(prov):
+                rest = compact_item[len(prov) :]
+                keys.extend(geocode_query_variants(rest))
+                keys.append(prov + city_key(rest))
     return _unique(keys)
+
+
+def _longest_table_hit(text: str, cities: dict[str, list]) -> str | None:
+    if not text:
+        return None
+    best = ""
+    pool = set(PREFECTURES) | set(BUILTIN_CITIES) | set(cities)
+    for key in pool:
+        if 2 <= len(key) <= 6 and key in text and len(key) > len(best):
+            best = key
+    return best or None
 
 
 def lookup_china_city(location: str) -> tuple[float, float, str, str] | None:
@@ -148,4 +192,19 @@ def lookup_china_city(location: str) -> tuple[float, float, str, str] | None:
             continue
         lat, lng, admin1 = float(row[0]), float(row[1]), str(row[2])
         return lat, lng, admin1, city_key(key) or key
-    return None
+    compact = normalize_query(location)
+    hit = _longest_table_hit(compact, cities) or _longest_table_hit(
+        location.replace(" ", ""), cities
+    )
+    if hit is None:
+        return None
+    row = cities.get(hit)
+    if row is None:
+        row = PREFECTURES.get(hit)
+    if row is None and hit in BUILTIN_CITIES:
+        lat0, lng0, admin0, _pop = BUILTIN_CITIES[hit]
+        row = [lat0, lng0, admin0]
+    if row is None:
+        return None
+    lat, lng, admin1 = float(row[0]), float(row[1]), str(row[2])
+    return lat, lng, admin1, city_key(hit) or hit
