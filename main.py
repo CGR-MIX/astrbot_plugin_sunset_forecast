@@ -43,7 +43,7 @@ from astrbot.api.star import Context, Star, register
 
 from sunset_forecast.clients import ForecastError, geocode
 from sunset_forecast.pipeline import forecast_cloud_sea, forecast_location
-from sunset_forecast.places import _load_cities, lookup_china_city
+from sunset_forecast.places import DEFAULT_SUNSET_LOCATION, _load_cities, lookup_china_city
 from sunset_forecast.report import format_cloudsea_chat, format_sunset_chat
 from sunset_forecast.spots import resolve_spot
 
@@ -109,13 +109,13 @@ async def _run(func, *args, **kwargs):
     )
 
 
-@register("sunset_forecast", "ChanGR", "晚霞与云海预报", "1.0.6")
+@register("sunset_forecast", "ChanGR", "晚霞与云海预报", "1.0.7")
 class SunsetForecastPlugin(Star):
     def __init__(self, context: Context, config=None):
         super().__init__(context)
         self.config = config
         n_cities = len(_load_cities())
-        logger.info("插件 [sunset_forecast] v1.0.6 已加载，城市表 %s 条。", n_cities)
+        logger.info("插件 [sunset_forecast] v1.0.7 已加载，城市表 %s 条。", n_cities)
 
     def _days(self) -> int:
         try:
@@ -130,7 +130,7 @@ class SunsetForecastPlugin(Star):
         if hit is not None:
             return hit[3]
         cleaned = raw.strip() if raw else ""
-        return cleaned or str(_cfg(self.config, "default_city", "上海"))
+        return cleaned or str(_cfg(self.config, "default_city", DEFAULT_SUNSET_LOCATION))
 
     def _spot(self, event: AstrMessageEvent, extra: str = "") -> str:
         return (
@@ -141,11 +141,11 @@ class SunsetForecastPlugin(Star):
 
     @filter.command("晚霞")
     async def cmd_sunset(self, event: AstrMessageEvent, city: str = ""):
-        """查询今晚/明天晚霞评分和概率。例：/晚霞 上海"""
+        """查询今晚/明天晚霞评分和概率。不写城市则查广东肇庆端州区。例：/晚霞  或  /晚霞 广州"""
         location = self._city(event, city)
         if resolve_spot(location):
             yield event.plain_result(
-                f"「{location}」是云海观景点。查云海请用 /云海 {location}，晚霞请写城市，例如 /晚霞 广州"
+                f"「{location}」是云海观景点。查云海请用 /云海 {location}，晚霞请写城市，例如 /晚霞 肇庆"
             )
             return
         try:
@@ -171,7 +171,7 @@ class SunsetForecastPlugin(Star):
         except Exception as exc:
             geo_line = f"失败：{exc}"
         yield event.plain_result(
-            "晚霞插件诊断 v1.0.6\n"
+            "晚霞插件诊断 v1.0.7\n"
             f"城市表 {len(cities)} 条\n"
             f"原始输入 {raw!r}\n"
             f"表内命中 {hit}\n"
@@ -206,7 +206,7 @@ class SunsetForecastPlugin(Star):
         spot = str(_cfg(self.config, "default_cloudsea", "新兴风车山"))
         if resolve_spot(city):
             spot = city
-            city = str(_cfg(self.config, "default_city", "上海"))
+            city = str(_cfg(self.config, "default_city", DEFAULT_SUNSET_LOCATION))
         try:
             sunset_days, sea_days = await asyncio.wait_for(
                 asyncio.gather(
@@ -230,7 +230,7 @@ class SunsetForecastPlugin(Star):
     async def tool_sunset(self, event: AstrMessageEvent, location: str) -> str:
         """查询指定城市今晚和明天的晚霞鲜艳度、AOD 和出现概率。
         Args:
-            location(string): 城市名，例如上海、广州、杭州
+            location(string): 城市名，例如广东肇庆端州区、肇庆、广州
         """
         try:
             days = await _run(forecast_location, location, days=self._days())

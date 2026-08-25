@@ -41,4 +41,4 @@ if ($junction.ExitCode -ne 0) {
 }
 
 Write-Host "插件已放到 $PluginDst"
-Write-Host "请重启 AstrBot，发送 /晚霞诊断 肇庆 确认版本是 v1.0.6"
+Write-Host "请重启 AstrBot，发送 /晚霞诊断 肇庆 确认版本是 v1.0.7"

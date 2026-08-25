@@ -14,7 +14,12 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from .cloudsea import PRESSURE_LEVELS, CloudSeaSample, PressureLevel
-from .places import city_key, geocode_query_variants, lookup_china_city
+from .places import (
+    city_key,
+    geocode_query_variants,
+    lookup_china_city,
+    sunsetbot_query_city,
+)
 from .scoring import HourSample, parse_labeled_number
 from .spots import ViewSpot
 
@@ -110,25 +115,34 @@ def http_get_json(url: str, timeout: int = 8, retries: int = 2) -> Any:
 
 def _city_candidates(location: str) -> list[str]:
     name = location.strip()
-    if not name:
+    mapped = sunsetbot_query_city(location) if name else ""
+    if not name and not mapped:
         raise ForecastError("地点不能为空")
-    candidates = [name]
-    if name.endswith("市") and len(name) > 2:
-        candidates.append(name[:-1])
-    if name.endswith("省") and len(name) > 2:
-        candidates.append(name[:-1])
-    if "-" in name:
-        candidates.append(name.split("-")[-1])
-        candidates.append(name.split("-")[0])
-    # 去重且保持顺序
+    candidates: list[str] = []
+    for item in (mapped, name):
+        item = (item or "").strip()
+        if not item:
+            continue
+        candidates.append(item)
+        if item.endswith("市") and len(item) > 2:
+            candidates.append(item[:-1])
+        if item.endswith("省") and len(item) > 2:
+            candidates.append(item[:-1])
+        if "-" in item:
+            candidates.append(item.split("-")[-1])
+            candidates.append(item.split("-")[0])
+    if mapped == "肇庆":
+        candidates.insert(1, "广东-肇庆")
+    # SunsetBot 的「端州」是朝鲜端州，不是肇庆端州区。
     seen: set[str] = set()
     unique: list[str] = []
     for item in candidates:
         item = item.strip()
-        if item and item not in seen:
-            seen.add(item)
-            unique.append(item)
-    return unique
+        if not item or item == "端州" or item in seen:
+            continue
+        seen.add(item)
+        unique.append(item)
+    return unique or ["肇庆"]
 
 
 def query_sunsetbot(

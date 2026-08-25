@@ -2,8 +2,8 @@
   "default_city": {
     "description": "晚霞默认城市",
     "type": "string",
-    "hint": "例如 上海、广州。指令里写了城市则优先生效。",
-    "default": "上海"
+    "hint": "默认广东肇庆端州区。指令里写了城市则优先生效。",
+    "default": "广东肇庆端州区"
   },
   "default_cloudsea": {
     "description": "云海默认观景点",

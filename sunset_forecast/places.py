@@ -7,6 +7,12 @@ from pathlib import Path
 
 from .prefectures import PREFECTURES
 
+# 晚霞默认点：肇庆端州区（SunsetBot 不能查「端州」，会命中朝鲜-端州）。
+DEFAULT_SUNSET_LOCATION = "广东肇庆端州区"
+DUANZHOU_LAT = 23.05266
+DUANZHOU_LNG = 112.47233
+_DUANZHOU = (DUANZHOU_LAT, DUANZHOU_LNG, "广东", 4114000)
+
 # 少量手写覆盖，优先级高于数据包。
 BUILTIN_CITIES: dict[str, tuple[float, float, str, int]] = {
     "北京": (39.9042, 116.4074, "北京", 21540000),
@@ -19,9 +25,37 @@ BUILTIN_CITIES: dict[str, tuple[float, float, str, int]] = {
     "深圳": (22.5431, 114.0579, "广东", 17560000),
     "杭州": (30.2741, 120.1551, "浙江", 11936000),
     "肇庆": (23.0472, 112.4653, "广东", 4114000),
+    "端州": _DUANZHOU,
+    "端州区": _DUANZHOU,
+    "肇庆端州": _DUANZHOU,
+    "广东端州": _DUANZHOU,
+    "广东肇庆端州": _DUANZHOU,
+    "广东肇庆端州区": _DUANZHOU,
     "佛山": (23.0218, 113.1219, "广东", 9498000),
     "云浮": (22.9150, 112.0445, "广东", 2383000),
     "清远": (23.6820, 113.0560, "广东", 3969000),
+}
+
+# 表内键 -> 对外显示名。端州保留「区」，避免和朝鲜端州混淆。
+DISPLAY_NAMES: dict[str, str] = {
+    "端州": "端州区",
+    "端州区": "端州区",
+    "肇庆端州": "端州区",
+    "肇庆端州区": "端州区",
+    "广东端州": "端州区",
+    "广东肇庆端州": "端州区",
+    "广东肇庆端州区": "端州区",
+}
+
+# SunsetBot 查询名。裸「端州」会返回朝鲜-端州。
+SUNSETBOT_QUERY_ALIASES: dict[str, str] = {
+    "端州": "肇庆",
+    "端州区": "肇庆",
+    "广东端州": "肇庆",
+    "肇庆端州": "肇庆",
+    "肇庆端州区": "肇庆",
+    "广东肇庆端州": "肇庆",
+    "广东肇庆端州区": "肇庆",
 }
 
 PROVINCES: tuple[str, ...] = (
@@ -183,6 +217,32 @@ def _longest_table_hit(text: str, cities: dict[str, list]) -> str | None:
     return best or None
 
 
+def _display_name(key: str) -> str:
+    for candidate in (key, city_key(key)):
+        if candidate in DISPLAY_NAMES:
+            return DISPLAY_NAMES[candidate]
+    return city_key(key) or key
+
+
+def sunsetbot_query_city(location: str) -> str:
+    """SunsetBot 用的城市名。区县别名升到地级市；禁止裸查「端州」。"""
+    compact = normalize_query(location) or location.strip()
+    names = [compact, city_key(compact), location.strip()]
+    hit = lookup_china_city(location)
+    if hit is not None:
+        names.append(hit[3])
+    for name in names:
+        if name in SUNSETBOT_QUERY_ALIASES:
+            return SUNSETBOT_QUERY_ALIASES[name]
+    if hit is not None:
+        _lat, _lng, admin1, display = hit
+        if admin1 and display.startswith(admin1) and len(display) > len(admin1):
+            rest = display[len(admin1) :]
+            return SUNSETBOT_QUERY_ALIASES.get(rest, rest)
+        return display
+    return compact
+
+
 def lookup_china_city(location: str) -> tuple[float, float, str, str] | None:
     """返回 lat, lng, admin1, 显示名。"""
     cities = _load_cities()
@@ -191,7 +251,7 @@ def lookup_china_city(location: str) -> tuple[float, float, str, str] | None:
         if row is None:
             continue
         lat, lng, admin1 = float(row[0]), float(row[1]), str(row[2])
-        return lat, lng, admin1, city_key(key) or key
+        return lat, lng, admin1, _display_name(key)
     compact = normalize_query(location)
     hit = _longest_table_hit(compact, cities) or _longest_table_hit(
         location.replace(" ", ""), cities
@@ -207,4 +267,4 @@ def lookup_china_city(location: str) -> tuple[float, float, str, str] | None:
     if row is None:
         return None
     lat, lng, admin1 = float(row[0]), float(row[1]), str(row[2])
-    return lat, lng, admin1, city_key(hit) or hit
+    return lat, lng, admin1, _display_name(hit)

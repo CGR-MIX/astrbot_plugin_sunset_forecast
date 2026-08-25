@@ -11,9 +11,9 @@ on:
   workflow_dispatch:
     inputs:
       location:
-        description: "城市，例如 上海 / 广州 / 北京-朝阳区"
+        description: "城市，例如 广东肇庆端州区 / 肇庆 / 广州"
         required: false
-        default: "上海"
+        default: "广东肇庆端州区"
       days:
         description: "预报天数"
         required: false
@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      SUNSET_LOCATION: ${{ github.event.inputs.location || vars.SUNSET_LOCATION || '上海' }}
+      SUNSET_LOCATION: ${{ github.event.inputs.location || vars.SUNSET_LOCATION || '广东肇庆端州区' }}
       CLOUDSEA_LOCATION: ${{ vars.CLOUDSEA_LOCATION || '新兴风车山' }}
       SUNSET_DAYS: ${{ github.event.inputs.days || '2' }}
       SUNSET_KIND: both
