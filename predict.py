@@ -19,7 +19,7 @@ if str(ROOT) not in sys.path:
 from sunset_forecast.clients import ForecastError
 from sunset_forecast.pipeline import forecast_cloud_sea, forecast_location
 from sunset_forecast.places import DEFAULT_SUNSET_LOCATION
-from sunset_forecast.spots import resolve_spot
+from sunset_forecast.spots import DEFAULT_CLOUDSEA_LOCATION, resolve_spot
 from sunset_forecast.report import (
     CloudSeaDay,
     DayForecast,
@@ -36,7 +36,7 @@ def load_config() -> dict:
     if not CONFIG_PATH.exists():
         return {
             "location": DEFAULT_SUNSET_LOCATION,
-            "cloud_sea_location": "新兴风车山",
+            "cloud_sea_location": DEFAULT_CLOUDSEA_LOCATION,
             "days": 2,
             "daily_time": "14:30",
         }
@@ -114,7 +114,7 @@ def parse_args(argv: list[str] | None, config: dict) -> argparse.Namespace:
     parser.add_argument(
         "--cloud-sea-location",
         default=None,
-        help="云海观景点，默认新兴风车山",
+        help="云海观景点，默认云浮风车山",
     )
     parser.add_argument("--lat", type=float, default=None, help="自定义观景纬度")
     parser.add_argument("--lng", type=float, default=None, help="自定义观景经度")
@@ -176,7 +176,7 @@ def main(argv: list[str] | None = None) -> int:
         args.cloud_sea_location
         or os.environ.get("CLOUDSEA_LOCATION")
         or config.get("cloud_sea_location")
-        or "新兴风车山"
+        or DEFAULT_CLOUDSEA_LOCATION
     )
     if args.days is None:
         env_days = os.environ.get("SUNSET_DAYS")

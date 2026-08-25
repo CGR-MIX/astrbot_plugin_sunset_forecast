@@ -14,7 +14,7 @@ from sunset_forecast.cloudsea import (
     pick_best_morning,
     score_cloud_sea_sample,
 )
-from sunset_forecast.spots import resolve_spot
+from sunset_forecast.spots import DEFAULT_CLOUDSEA_LOCATION, resolve_spot
 
 
 def classic_levels() -> tuple[PressureLevel, ...]:
@@ -63,11 +63,20 @@ def sample_from(levels: tuple[PressureLevel, ...], **overrides) -> CloudSeaSampl
 
 class SpotTests(unittest.TestCase):
     def test_xinxing_aliases(self):
-        for name in ("新兴风车山", "风车山", "18号风车", "水源山"):
+        for name in ("云浮风车山", "新兴风车山", "风车山", "18号风车", "水源山"):
             spot = resolve_spot(name)
             self.assertIsNotNone(spot)
+            self.assertEqual(spot.name, DEFAULT_CLOUDSEA_LOCATION)
             self.assertEqual(spot.peak_m, 1137.0)
             self.assertAlmostEqual(spot.latitude, 22.7289)
+
+    def test_config_default_is_yunfu_fengcheshan(self):
+        import json
+
+        config = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
+        schema = json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
+        self.assertEqual(config["cloud_sea_location"], DEFAULT_CLOUDSEA_LOCATION)
+        self.assertEqual(schema["default_cloudsea"]["default"], DEFAULT_CLOUDSEA_LOCATION)
 
     def test_unknown_spot(self):
         self.assertIsNone(resolve_spot("上海"))

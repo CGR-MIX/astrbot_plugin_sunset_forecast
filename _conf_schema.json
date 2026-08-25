@@ -8,8 +8,8 @@
   "default_cloudsea": {
     "description": "云海默认观景点",
     "type": "string",
-    "hint": "内置点：新兴风车山。也可用 风车山、18号风车。",
-    "default": "新兴风车山"
+    "hint": "默认云浮风车山（新兴县水源山 18 号风车）。也可用 风车山、18号风车。",
+    "default": "云浮风车山"
   },
   "days": {
     "description": "预报天数",

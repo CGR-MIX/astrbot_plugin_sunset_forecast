@@ -45,7 +45,7 @@ from sunset_forecast.clients import ForecastError, geocode
 from sunset_forecast.pipeline import forecast_cloud_sea, forecast_location
 from sunset_forecast.places import DEFAULT_SUNSET_LOCATION, _load_cities, lookup_china_city
 from sunset_forecast.report import format_cloudsea_chat, format_sunset_chat
-from sunset_forecast.spots import resolve_spot
+from sunset_forecast.spots import DEFAULT_CLOUDSEA_LOCATION, resolve_spot
 
 COMMAND_PREFIXES = (
     "晚霞云海",
@@ -136,7 +136,7 @@ class SunsetForecastPlugin(Star):
         return (
             (extra or "").strip()
             or _rest_arg(event)
-            or str(_cfg(self.config, "default_cloudsea", "新兴风车山"))
+            or str(_cfg(self.config, "default_cloudsea", DEFAULT_CLOUDSEA_LOCATION))
         )
 
     @filter.command("晚霞")
@@ -186,7 +186,7 @@ class SunsetForecastPlugin(Star):
 
     @filter.command("云海")
     async def cmd_cloudsea(self, event: AstrMessageEvent, spot: str = ""):
-        """查询云海出现概率。默认新兴风车山。例：/云海  或  /云海 风车山"""
+        """查询云海出现概率。默认云浮风车山。例：/云海  或  /云海 风车山"""
         spot = self._spot(event, spot)
         try:
             days = await _run(forecast_cloud_sea, spot, days=self._days())
@@ -203,7 +203,7 @@ class SunsetForecastPlugin(Star):
     async def cmd_both(self, event: AstrMessageEvent, city: str = ""):
         """同时查晚霞和默认观景点云海。例：/晚霞云海 广州"""
         city = self._city(event, city)
-        spot = str(_cfg(self.config, "default_cloudsea", "新兴风车山"))
+        spot = str(_cfg(self.config, "default_cloudsea", DEFAULT_CLOUDSEA_LOCATION))
         if resolve_spot(city):
             spot = city
             city = str(_cfg(self.config, "default_city", DEFAULT_SUNSET_LOCATION))
@@ -240,11 +240,11 @@ class SunsetForecastPlugin(Star):
 
     @filter.llm_tool(name="forecast_cloud_sea")
     async def tool_cloudsea(self, event: AstrMessageEvent, spot: str) -> str:
-        """查询指定观景点的云海出现概率，默认新兴风车山。
+        """查询指定观景点的云海出现概率，默认云浮风车山。
         Args:
-            spot(string): 观景点名称，例如新兴风车山、风车山。未知山头需要先录入海拔。
+            spot(string): 观景点名称，例如云浮风车山、风车山。未知山头需要先录入海拔。
         """
-        name = (spot or "").strip() or str(_cfg(self.config, "default_cloudsea", "新兴风车山"))
+        name = (spot or "").strip() or str(_cfg(self.config, "default_cloudsea", DEFAULT_CLOUDSEA_LOCATION))
         try:
             days = await _run(forecast_cloud_sea, name, days=self._days())
             return format_cloudsea_chat(days)

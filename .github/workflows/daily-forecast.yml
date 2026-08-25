@@ -36,7 +36,7 @@ jobs:
     timeout-minutes: 10
     env:
       SUNSET_LOCATION: ${{ github.event.inputs.location || vars.SUNSET_LOCATION || '广东肇庆端州区' }}
-      CLOUDSEA_LOCATION: ${{ vars.CLOUDSEA_LOCATION || '新兴风车山' }}
+      CLOUDSEA_LOCATION: ${{ vars.CLOUDSEA_LOCATION || '云浮风车山' }}
       SUNSET_DAYS: ${{ github.event.inputs.days || '2' }}
       SUNSET_KIND: both
       PYTHONUTF8: "1"

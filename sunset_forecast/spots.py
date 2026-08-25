@@ -20,11 +20,14 @@ class ViewSpot:
     sunsetbot_city: str | None = None
 
 
-# 18 号风车 / 水源山主峰。坐标来自公开徒步轨迹；海拔来自地方志/攻略。
+DEFAULT_CLOUDSEA_LOCATION = "云浮风车山"
+
+# 云浮市新兴县水源山 18 号风车。坐标来自公开徒步轨迹；海拔来自地方志/攻略。
 XINXING_FENGCHESHAN = ViewSpot(
     key="xinxing-fengcheshan",
-    name="新兴风车山",
+    name="云浮风车山",
     aliases=(
+        "云浮风车山",
         "新兴风车山",
         "风车山",
         "水源山",
@@ -32,7 +35,7 @@ XINXING_FENGCHESHAN = ViewSpot(
         "新兴水源山",
         "天露山风电场",
         "新兴县风车山",
-        "云浮风车山",
+        "云浮新兴风车山",
     ),
     latitude=22.7289,
     longitude=112.0587,
@@ -40,7 +43,7 @@ XINXING_FENGCHESHAN = ViewSpot(
     valley_m=80.0,
     timezone="Asia/Shanghai",
     admin1="广东",
-    note="默认观景面是水源山 18 号风车（1137 m），俯瞰山谷/开平大沙水库方向。云海多在日出前后。",
+    note="云浮市新兴县水源山 18 号风车（1137 m），俯瞰山谷/开平大沙水库方向。云海多在日出前后。",
     sunsetbot_city="云浮",
 )
 
